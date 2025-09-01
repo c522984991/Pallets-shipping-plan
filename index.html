@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>车厢托盘布局可视化 / Pallet Layout Visualization</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin:16px; color:#222; }
+  h1 { font-size:18px; margin-bottom:6px; }
+  .controls { margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .canvas { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+  .card { border:1px solid #ddd; padding:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.04); width:420px;}
+  .vehicle-title { font-weight:600; margin-bottom:6px; }
+  svg { background: linear-gradient(180deg,#fbfbfb,#ffffff); }
+  .meta { font-size:12px; margin-top:6px; color:#333; }
+  .legend { margin-top:8px; font-size:13px; }
+  .btn { padding:6px 10px; border-radius:4px; border:1px solid #888; background:#f3f3f3; cursor:pointer; margin-right:6px;}
+  .btn.active { background:#3b82f6; color:white; border-color:#3b82f6; }
+  .footer { margin-top:12px; font-size:13px; color:#444; }
+  .label { font-size:11px; fill:#000; }
+  .toprow { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<h1 id="title">车厢内托盘格子布局示意（单层、按格子摆放） / Pallet Grid Layout (single layer)</h1>
+
+<div class="controls">
+  <div class="toprow">
+    <button id="langBtnCN" class="btn active">中文 / 中文</button>
+    <button id="langBtnEN" class="btn">English</button>
+  </div>
+  <div style="margin-left:8px;">
+    <button id="btnEU" class="btn active">欧洲托盘 1.2×0.8 m</button>
+    <button id="btnNS" class="btn">非标准托盘 1.2×1.0 m</button>
+  </div>
+  <label style="margin-left:12px;font-size:13px;">Scale (px/m): <input id="scale" type="number" value="24" min="8" max="120" style="width:72px;"/></label>
+</div>
+
+<div class="canvas" id="canvas"></div>
+
+<div class="footer" id="footer">
+  <!-- bilingual summary filled by script -->
+</div>
+
+<script>
+/* 数据定义（单位：m） */
+const vehicles = [
+  { id:'van', nameCN:'Van', nameEN:'Van', L:4.5, W:1.85 },
+  { id:'truck', nameCN:'Truck', nameEN:'Truck', L:6.5, W:2.48 },
+  { id:'solo', nameCN:'SOLO', nameEN:'SOLO', L:7.2, W:2.48 },
+  { id:'trailer', nameCN:'Standard Trailer', nameEN:'Standard Trailer', L:13.6, W:2.48 }
+];
+const pallets = {
+  eu: { key:'eu', nameCN:'欧洲托盘', nameEN:'Europe pallet', w:1.2, h:0.8, area:1.2*0.8 },
+  ns: { key:'ns', nameCN:'非标准托盘', nameEN:'Non-standard pallet', w:1.2, h:1.0, area:1.2*1.0 }
+};
+
+const canvasDiv = document.getElementById('canvas');
+const btnEU = document.getElementById('btnEU');
+const btnNS = document.getElementById('btnNS');
+const scaleInput = document.getElementById('scale');
+const langBtnCN = document.getElementById('langBtnCN');
+const langBtnEN = document.getElementById('langBtnEN');
+const footer = document.getElementById('footer');
+
+let active = 'eu';
+let lang = 'cn';
+let scale = Number(scaleInput.value);
+
+function computeGrid(L,W,pW,pH){
+  const nA = Math.floor(L / pW) * Math.floor(W / pH);
+  const nB = Math.floor(L / pH) * Math.floor(W / pW);
+  return { nA, nB, n: Math.max(nA,nB) };
+}
+
+function drawPalletsSvg(L,W,pW,pH,scale,mode){
+  const nA_x = Math.floor(L / pW), nA_y = Math.floor(W / pH);
+  const nA = nA_x * nA_y;
+  const nB_x = Math.floor(L / pH), nB_y = Math.floor(W / pW);
+  const nB = nB_x * nB_y;
+
+  let cols=0, rows=0, cellW=0, cellH=0;
+  if(nA >= nB){ cols = nA_x; rows = nA_y; cellW = pW; cellH = pH; }
+  else { cols = nB_x; rows = nB_y; cellW = pH; cellH = pW; }
+
+  const padX = 0, padY = 0;
+  let s = '';
+  const palClass = (mode==='eu') ? 'pallet-eu' : 'pallet-ns';
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x = padX + c * cellW * scale;
+      const y = padY + r * cellH * scale;
+      s += `<rect class="${palClass}" x="${x}" y="${y}" width="${cellW*scale}" height="${cellH*scale}" rx="3" ry="3"></rect>`;
+    }
+  }
+  const total = cols*rows;
+  s += `<text class="label" x="${Math.min(L*scale - 4, 6)}" y="${Math.min(W*scale - 6, 14)}" text-anchor="end" fill="#222">${total} pcs</text>`;
+  return s;
+}
+
+function render(){
+  canvasDiv.innerHTML = '';
+  scale = Number(scaleInput.value) || 24;
+  const pal = (active === 'eu') ? pallets.eu : pallets.ns;
+
+  vehicles.forEach(v=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+    const svgW = Math.max(220, Math.round(v.L * scale) + 80);
+    const svgH = Math.max(140, Math.round(v.W * scale) + 80);
+    const labelName = (lang==='cn') ? v.nameCN : v.nameEN;
+    const palletName = (lang==='cn') ? pal.nameCN : pal.nameEN;
+
+    const svgNS = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" aria-labelledby="title-${v.id}">
+      <title id="title-${v.id}">${labelName} layout</title>
+      <defs>
+        <style>
+          .veh { fill:#fff; stroke:#2f4f4f; stroke-width:1.5; }
+          .pallet-eu { fill:#60a5fa; stroke:#ffffff; stroke-width:1; opacity:0.95; }
+          .pallet-ns { fill:#f59e0b; stroke:#ffffff; stroke-width:1; opacity:0.95; }
+          .dim { font-size:11px; fill:#111; }
+          .label { font-size:11px; fill:#000; }
+        </style>
+      </defs>
+      <g transform="translate(40,20)">
+        <rect class="veh" x="0" y="0" width="${v.L*scale}" height="${v.W*scale}" rx="4" ry="4"></rect>
+        <text class="dim" x="${(v.L*scale)/2}" y="${v.W*scale + 18}" text-anchor="middle">${v.L} m</text>
+        <g transform="translate(-14,${(v.W*scale)/2}) rotate(-90)">
+          <text class="dim" x="0" y="0" text-anchor="middle">${v.W} m</text>
+        </g>
+        ${drawPalletsSvg(v.L, v.W, pal.w, pal.h, scale, active)}
+        <text x="${(v.L*scale)/2}" y="-6" class="dim" text-anchor="middle">${labelName} — ${v.L}×${v.W} m</text>
+      </g>
+    </svg>`;
+
+    const metaId = `meta-${v.id}`;
+    card.innerHTML = `<div class="vehicle-title">${labelName}</div>` + svgNS + `<div class="meta" id="${metaId}"></div>`;
+    canvasDiv.appendChild(card);
+
+    const grid = computeGrid(v.L,v.W, pal.w, pal.h);
+    const vehicleArea = (v.L * v.W);
+    const palCount = grid.n;
+    const palAreaTotal = +(palCount * pal.area).toFixed(3);
+    const percent = +((palAreaTotal / vehicleArea) * 100).toFixed(1);
+    const metaDiv = card.querySelector(`#${metaId}`);
+    if(lang==='cn'){
+      metaDiv.innerHTML = `<div>托盘类型：<strong>${palletName} ${pal.w}×${pal.h} m</strong></div>
+                           <div>理论可放（单层格子最大）：<strong>${palCount}</strong> 个</div>
+                           <div>托盘总占地：<strong>${palAreaTotal} m²</strong>（车厢地面 ${vehicleArea} m²， 占比 ${percent}%）</div>
+                           <div style="margin-top:6px;font-size:12px;color:#555">（说明：取两种单方向摆放的较大值；图示为直列格子摆放）</div>`;
+    } else {
+      metaDiv.innerHTML = `<div>Pallet type: <strong>${palletName} ${pal.w}×${pal.h} m</strong></div>
+                           <div>Theoretical max (single-layer grid): <strong>${palCount}</strong> pcs</div>
+                           <div>Total pallet area: <strong>${palAreaTotal} m²</strong> (vehicle floor ${vehicleArea} m², share ${percent}%)</div>
+                           <div style="margin-top:6px;font-size:12px;color:#555">(Note: takes larger of two orientations; diagram shows grid layout)</div>`;
+    }
+  });
+
+  // footer bilingual summary
+  let footHtml = '';
+  if(lang==='cn'){
+    footHtml = `<strong>简洁汇总（单层、格子摆放，最大值）</strong>
+    <ul>
+      <li>Van (4.5×1.85 m)：欧洲托盘 6 个（占地 5.76 m² / 69.2%），非标准托盘 4 个（占地 4.80 m² / 57.7%）</li>
+      <li>Truck (6.5×2.48 m)：欧洲托盘 16 个（占地 15.36 m² / 95.2%），非标准托盘 12 个（占地 14.40 m² / 89.3%）</li>
+      <li>SOLO (7.2×2.48 m)：欧洲托盘 18 个（占地 17.28 m² / 96.8%），非标准托盘 14 个（占地 16.80 m² / 94.1%）</li>
+      <li>Standard Trailer (13.6×2.48 m)：欧洲托盘 34 个（占地 32.64 m² / 96.8%），非标准托盘 26 个（占地 31.20 m² / 92.5%）</li>
+    </ul>
+    <div style="margin-top:6px;color:#444;font-size:13px">说明：图为按格子整列摆放的理论示意（不考虑轮拱、门缝、绑固空间或留缝）。</div>`;
+  } else {
+    footHtml = `<strong>Brief summary (single-layer grid)</strong>
+    <ul>
+      <li>Van (4.5×1.85 m): EU pallets 6 pcs (5.76 m² / 69.2%), Non-standard 4 pcs (4.80 m² / 57.7%)</li>
+      <li>Truck (6.5×2.48 m): EU pallets 16 pcs (15.36 m² / 95.2%), Non-standard 12 pcs (14.40 m² / 89.3%)</li>
+      <li>SOLO (7.2×2.48 m): EU pallets 18 pcs (17.28 m² / 96.8%), Non-standard 14 pcs (16.80 m² / 94.1%)</li>
+      <li>Standard Trailer (13.6×2.48 m): EU pallets 34 pcs (32.64 m² / 96.8%), Non-standard 26 pcs (31.20 m² / 92.5%)</li>
+    </ul>
+    <div style="margin-top:6px;color:#444;font-size:13px">Note: diagrams are theoretical grid layouts (do not consider wheel arches, door gaps, lashing or clearance).</div>`;
+  }
+  footer.innerHTML = footHtml;
+}
+
+/* UI handlers */
+btnEU.addEventListener('click', ()=>{
+  active = 'eu';
+  btnEU.classList.add('active'); btnNS.classList.remove('active');
+  render();
+});
+btnNS.addEventListener('click', ()=>{
+  active = 'ns';
+  btnNS.classList.add('active'); btnEU.classList.remove('active');
+  render();
+});
+scaleInput.addEventListener('change', ()=> render());
+
+langBtnCN.addEventListener('click', ()=>{
+  lang = 'cn';
+  langBtnCN.classList.add('active'); langBtnEN.classList.remove('active');
+  render();
+});
+langBtnEN.addEventListener('click', ()=>{
+  lang = 'en';
+  langBtnEN.classList.add('active'); langBtnCN.classList.remove('active');
+  render();
+});
+
+/* initial render */
+render();
+</script>
+</body>
+</html>
