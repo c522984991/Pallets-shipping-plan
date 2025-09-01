@@ -1,211 +1,422 @@
 <!doctype html>
 <html lang="zh">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>车厢托盘布局可视化 / Pallet Layout Visualization</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SOLO Gaylord 托盘布局与 CSV 导出 / SOLO Gaylord Pallet Layout</title>
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; margin:16px; color:#222; }
-  h1 { font-size:18px; margin-bottom:6px; }
-  .controls { margin-bottom:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  body { font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; margin:16px; color:#222; background:#f7f8fb; }
+  h1 { font-size:18px; margin-bottom:8px; }
+  .controls { margin-bottom:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .btn { padding:6px 10px; border-radius:4px; border:1px solid #888; background:#f3f3f3; cursor:pointer; }
+  .btn.active { background:#1f78d1; color:#fff; border-color:#1f78d1; }
   .canvas { display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
-  .card { border:1px solid #ddd; padding:8px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.04); width:420px;}
-  .vehicle-title { font-weight:600; margin-bottom:6px; }
-  svg { background: linear-gradient(180deg,#fbfbfb,#ffffff); }
-  .meta { font-size:12px; margin-top:6px; color:#333; }
-  .legend { margin-top:8px; font-size:13px; }
-  .btn { padding:6px 10px; border-radius:4px; border:1px solid #888; background:#f3f3f3; cursor:pointer; margin-right:6px;}
-  .btn.active { background:#3b82f6; color:white; border-color:#3b82f6; }
+  .card { border:1px solid #e0e6ef; padding:10px; background:#fff; box-shadow:0 1px 4px rgba(15,23,42,0.04); width:460px; }
+  .vehicle-title { font-weight:700; margin-bottom:8px; }
+  svg { background: linear-gradient(180deg,#ffffff,#fbfdff); display:block; margin:6px 0; }
+  .meta { font-size:13px; margin-top:6px; color:#333; line-height:1.4; }
+  .small { font-size:12px; color:#555; }
+  label.input { font-size:13px; margin-right:6px; }
+  input[type="number"] { width:84px; padding:6px; border-radius:4px; border:1px solid #bbb; }
   .footer { margin-top:12px; font-size:13px; color:#444; }
-  .label { font-size:11px; fill:#000; }
-  .toprow { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .inline { display:inline-block; vertical-align:middle; }
+  .control-block { background:#fff; border:1px solid #e6eef9; padding:8px; border-radius:6px; box-shadow:0 1px 2px rgba(20,40,80,0.02); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .note { font-size:12px; color:#666; margin-top:6px; }
+  table.summary { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px;}
+  table.summary th, table.summary td { border:1px solid #eee; padding:6px; text-align:left; }
+  .link { color:#1f78d1; text-decoration:none; }
+  .csv-btn { background:#10b981; color:#fff; border-color:#10b981; }
+  .small-muted { font-size:12px; color:#666; }
+  .field { margin-right:8px; }
 </style>
 </head>
 <body>
-<h1 id="title">车厢内托盘格子布局示意（单层、按格子摆放） / Pallet Grid Layout (single layer)</h1>
+<h1 id="title-cn">SOLO — Gaylord 在托盘上的布局可视化与 CSV 导出（含偏移调节 / 中英）</h1>
 
-<div class="controls">
-  <div class="toprow">
-    <button id="langBtnCN" class="btn active">中文 / 中文</button>
-    <button id="langBtnEN" class="btn">English</button>
+<div class="controls control-block">
+  <div class="row">
+    <button id="langCn" class="btn active">中文</button>
+    <button id="langEn" class="btn">EN</button>
+
+    <button id="palletEU" class="btn">欧洲托盘 1.2×0.8 m</button>
+    <button id="palletNS" class="btn active">非标准托盘 1.2×1.0 m</button>
+
+    <label class="input small">Scale (px / m)</label>
+    <input id="scale" type="number" value="28" min="8" max="160"/>
   </div>
-  <div style="margin-left:8px;">
-    <button id="btnEU" class="btn active">欧洲托盘 1.2×0.8 m</button>
-    <button id="btnNS" class="btn">非标准托盘 1.2×1.0 m</button>
+
+  <div class="row" style="margin-top:8px;">
+    <div style="margin-right:10px;">
+      <label class="small">Gaylord 模式</label><br/>
+      <select id="gaylordMode">
+        <option value="center">居中（默认）</option>
+        <option value="custom">自定义偏移（dx,dy）</option>
+      </select>
+    </div>
+
+    <div id="offsetInputs" style="display:none;">
+      <label class="small-muted">dx (m)</label>
+      <input id="dx" type="number" step="0.01" value="0.10"/>
+      <label class="small-muted">dy (m)</label>
+      <input id="dy" type="number" step="0.01" value="0.00"/>
+      <button id="applyOffset" class="btn">应用到所有托盘</button>
+    </div>
+
+    <div style="margin-left:12px;">
+      <button id="exportCsv" class="btn csv-btn">导出 CSV / Export CSV</button>
+      <button id="downloadSvg" class="btn">导出图像 SVG</button>
+    </div>
   </div>
-  <label style="margin-left:12px;font-size:13px;">Scale (px/m): <input id="scale" type="number" value="24" min="8" max="120" style="width:72px;"/></label>
+  <div class="note" id="noteArea">说明：坐标原点为车厢左上角内壁（单位 m）。CSV 字段包括：Vehicle, PalletIndex, CellX_m, CellY_m, PalletW_m, PalletH_m, Orientation, Gaylord_dx_m, Gaylord_dy_m, Gaylord_w_m, Gaylord_h_m, Height_m。</div>
 </div>
 
 <div class="canvas" id="canvas"></div>
 
-<div class="footer" id="footer">
-  <!-- bilingual summary filled by script -->
+<div class="footer" id="footerText">
+  <div class="small-muted">参考：Gaylord 定义与托盘配合常见说明（示例资料）。</div>
+  <ul>
+    <li><a class="link" href="https://www.inventoryops.com/inventoryops-glossary.html" target="_blank" rel="noopener">Glossary of Inventory Management and Warehouse Operations ...</a></li>
+    <li><a class="link" href="https://cdn2.hubspot.net/hubfs/435785/BJS%20Domestic%20Routing%20and%20Packaging%20Guide%202013.pdf" target="_blank" rel="noopener">BJ's Wholesale Club, Inc. Routing and Packaging Guide Domestic</a></li>
+  </ul>
 </div>
 
 <script>
-/* 数据定义（单位：m） */
+/* ---------- 数据定义（单位 m） ---------- */
 const vehicles = [
-  { id:'van', nameCN:'Van', nameEN:'Van', L:4.5, W:1.85 },
-  { id:'truck', nameCN:'Truck', nameEN:'Truck', L:6.5, W:2.48 },
-  { id:'solo', nameCN:'SOLO', nameEN:'SOLO', L:7.2, W:2.48 },
-  { id:'trailer', nameCN:'Standard Trailer', nameEN:'Standard Trailer', L:13.6, W:2.48 }
+  { id:'solo', key:'SOLO', L:7.2, W:2.48, nameCN:'SOLO', nameEN:'SOLO' }
+  // 该页面专注 SOLO；若需加入其他车型可扩展 vehicles 数组
 ];
 const pallets = {
   eu: { key:'eu', nameCN:'欧洲托盘', nameEN:'Europe pallet', w:1.2, h:0.8, area:1.2*0.8 },
   ns: { key:'ns', nameCN:'非标准托盘', nameEN:'Non-standard pallet', w:1.2, h:1.0, area:1.2*1.0 }
 };
+const gaylord = { w:1.2, h:0.8, height:1.6 }; // Gaylord 实际箱体尺寸（底面 1.2×0.8 m, 高 1.6 m）
 
-const canvasDiv = document.getElementById('canvas');
-const btnEU = document.getElementById('btnEU');
-const btnNS = document.getElementById('btnNS');
+/* ---------- DOM 元素 ---------- */
+const canvas = document.getElementById('canvas');
+const palletEUBtn = document.getElementById('palletEU');
+const palletNSBtn = document.getElementById('palletNS');
+const langCnBtn = document.getElementById('langCn');
+const langEnBtn = document.getElementById('langEn');
 const scaleInput = document.getElementById('scale');
-const langBtnCN = document.getElementById('langBtnCN');
-const langBtnEN = document.getElementById('langBtnEN');
-const footer = document.getElementById('footer');
+const gaylordModeSel = document.getElementById('gaylordMode');
+const offsetInputs = document.getElementById('offsetInputs');
+const dxInput = document.getElementById('dx');
+const dyInput = document.getElementById('dy');
+const applyOffsetBtn = document.getElementById('applyOffset');
+const exportCsvBtn = document.getElementById('exportCsv');
+const downloadSvgBtn = document.getElementById('downloadSvg');
+const noteArea = document.getElementById('noteArea');
 
-let active = 'eu';
+let activePallet = 'ns';
 let lang = 'cn';
 let scale = Number(scaleInput.value);
+let globalDx = null; // 若为 null 则按居中计算
+let globalDy = null;
 
-function computeGrid(L,W,pW,pH){
-  const nA = Math.floor(L / pW) * Math.floor(W / pH);
-  const nB = Math.floor(L / pH) * Math.floor(W / pW);
-  return { nA, nB, n: Math.max(nA,nB) };
+/* UI 状态 */
+function setActiveButton(btnGroup, keyBtn) {
+  btnGroup.forEach(b=>b.classList.remove('active'));
+  keyBtn.classList.add('active');
 }
 
-function drawPalletsSvg(L,W,pW,pH,scale,mode){
+/* 事件绑定 */
+palletEUBtn.addEventListener('click', ()=>{ activePallet='eu'; palletEUBtn.classList.add('active'); palletNSBtn.classList.remove('active'); render(); });
+palletNSBtn.addEventListener('click', ()=>{ activePallet='ns'; palletNSBtn.classList.add('active'); palletEUBtn.classList.remove('active'); render(); });
+
+langCnBtn.addEventListener('click', ()=>{ lang='cn'; langCnBtn.classList.add('active'); langEnBtn.classList.remove('active'); updateLang(); render(); });
+langEnBtn.addEventListener('click', ()=>{ lang='en'; langEnBtn.classList.add('active'); langCnBtn.classList.remove('active'); updateLang(); render(); });
+
+scaleInput.addEventListener('change', ()=>{ scale = Number(scaleInput.value) || 24; render(); });
+
+gaylordModeSel.addEventListener('change', ()=>{
+  if(gaylordModeSel.value === 'custom') { offsetInputs.style.display='inline-block'; globalDx = Number(dxInput.value); globalDy = Number(dyInput.value); }
+  else { offsetInputs.style.display='none'; globalDx = null; globalDy = null; }
+  render();
+});
+
+applyOffsetBtn.addEventListener('click', ()=>{
+  globalDx = Number(dxInput.value) || 0;
+  globalDy = Number(dyInput.value) || 0;
+  render();
+});
+
+/* 导出 CSV */
+exportCsvBtn.addEventListener('click', ()=>{
+  const csv = buildCsv();
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const fname = `SOLO_pallets_${activePallet}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = fname;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 3000);
+});
+
+/* 导出 SVG（当前第一个 card） */
+downloadSvgBtn.addEventListener('click', ()=>{
+  const svgEl = document.querySelector('#canvas svg');
+  if(!svgEl) return alert(lang==='cn' ? '未找到 SVG' : 'SVG not found');
+  const serializer = new XMLSerializer();
+  const src = serializer.serializeToString(svgEl);
+  const blob = new Blob([src], {type: 'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `SOLO_layout_${activePallet}.svg`;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },3000);
+});
+
+/* 切换语言文本 */
+function updateLang(){
+  if(lang==='cn'){
+    document.getElementById('title-cn').textContent = 'SOLO — Gaylord 在托盘上的布局可视化与 CSV 导出（含偏移调节 / 中英）';
+    noteArea.textContent = '说明：坐标原点为车厢左上角内壁（单位 m）。CSV 字段包括：Vehicle, PalletIndex, CellX_m, CellY_m, PalletW_m, PalletH_m, Orientation, Gaylord_dx_m, Gaylord_dy_m, Gaylord_w_m, Gaylord_h_m, Height_m。';
+  } else {
+    document.getElementById('title-cn').textContent = 'SOLO — Gaylord pallet layout & CSV export (with offset control)';
+    noteArea.textContent = 'Note: coordinates origin = vehicle inner top-left (meters). CSV fields: Vehicle, PalletIndex, CellX_m, CellY_m, PalletW_m, PalletH_m, Orientation, Gaylord_dx_m, Gaylord_dy_m, Gaylord_w_m, Gaylord_h_m, Height_m.';
+  }
+}
+
+/* 计算格子摆放（与之前一致） */
+function computeGrid(L,W,pW,pH){
   const nA_x = Math.floor(L / pW), nA_y = Math.floor(W / pH);
   const nA = nA_x * nA_y;
   const nB_x = Math.floor(L / pH), nB_y = Math.floor(W / pW);
   const nB = nB_x * nB_y;
-
-  let cols=0, rows=0, cellW=0, cellH=0;
-  if(nA >= nB){ cols = nA_x; rows = nA_y; cellW = pW; cellH = pH; }
-  else { cols = nB_x; rows = nB_y; cellW = pH; cellH = pW; }
-
-  const padX = 0, padY = 0;
-  let s = '';
-  const palClass = (mode==='eu') ? 'pallet-eu' : 'pallet-ns';
-  for(let r=0;r<rows;r++){
-    for(let c=0;c<cols;c++){
-      const x = padX + c * cellW * scale;
-      const y = padY + r * cellH * scale;
-      s += `<rect class="${palClass}" x="${x}" y="${y}" width="${cellW*scale}" height="${cellH*scale}" rx="3" ry="3"></rect>`;
-    }
-  }
-  const total = cols*rows;
-  s += `<text class="label" x="${Math.min(L*scale - 4, 6)}" y="${Math.min(W*scale - 6, 14)}" text-anchor="end" fill="#222">${total} pcs</text>`;
-  return s;
+  if(nA >= nB) return { cols: nA_x, rows: nA_y, cellW: pW, cellH: pH, orientation: 'A', total: nA };
+  else return { cols: nB_x, rows: nB_y, cellW: pH, cellH: pW, orientation: 'B', total: nB };
 }
 
+/* 渲染主函数 */
 function render(){
-  canvasDiv.innerHTML = '';
+  canvas.innerHTML = '';
   scale = Number(scaleInput.value) || 24;
-  const pal = (active === 'eu') ? pallets.eu : pallets.ns;
+  const pal = (activePallet === 'eu') ? pallets.eu : pallets.ns;
 
   vehicles.forEach(v=>{
-    const card = document.createElement('div');
-    card.className = 'card';
-    const svgW = Math.max(220, Math.round(v.L * scale) + 80);
-    const svgH = Math.max(140, Math.round(v.W * scale) + 80);
-    const labelName = (lang==='cn') ? v.nameCN : v.nameEN;
-    const palletName = (lang==='cn') ? pal.nameCN : pal.nameEN;
+    const card = document.createElement('div'); card.className='card';
+    const title = document.createElement('div'); title.className='vehicle-title';
+    title.textContent = (lang==='cn') ? `${v.nameCN} — ${v.L}×${v.W} m` : `${v.nameEN} — ${v.L}×${v.W} m`;
+    card.appendChild(title);
 
-    const svgNS = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" aria-labelledby="title-${v.id}">
-      <title id="title-${v.id}">${labelName} layout</title>
-      <defs>
-        <style>
-          .veh { fill:#fff; stroke:#2f4f4f; stroke-width:1.5; }
-          .pallet-eu { fill:#60a5fa; stroke:#ffffff; stroke-width:1; opacity:0.95; }
-          .pallet-ns { fill:#f59e0b; stroke:#ffffff; stroke-width:1; opacity:0.95; }
-          .dim { font-size:11px; fill:#111; }
-          .label { font-size:11px; fill:#000; }
-        </style>
-      </defs>
-      <g transform="translate(40,20)">
-        <rect class="veh" x="0" y="0" width="${v.L*scale}" height="${v.W*scale}" rx="4" ry="4"></rect>
-        <text class="dim" x="${(v.L*scale)/2}" y="${v.W*scale + 18}" text-anchor="middle">${v.L} m</text>
-        <g transform="translate(-14,${(v.W*scale)/2}) rotate(-90)">
-          <text class="dim" x="0" y="0" text-anchor="middle">${v.W} m</text>
-        </g>
-        ${drawPalletsSvg(v.L, v.W, pal.w, pal.h, scale, active)}
-        <text x="${(v.L*scale)/2}" y="-6" class="dim" text-anchor="middle">${labelName} — ${v.L}×${v.W} m</text>
-      </g>
-    </svg>`;
+    const svgW = Math.max(300, Math.round(v.L * scale) + 120);
+    const svgH = Math.max(180, Math.round(v.W * scale) + 100);
+    const viewW = svgW, viewH = svgH;
 
-    const metaId = `meta-${v.id}`;
-    card.innerHTML = `<div class="vehicle-title">${labelName}</div>` + svgNS + `<div class="meta" id="${metaId}"></div>`;
-    canvasDiv.appendChild(card);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', svgW);
+    svg.setAttribute('height', svgH);
+    svg.setAttribute('viewBox', `0 0 ${viewW} ${viewH}`);
+    svg.style.display = 'block';
+    // defs styles
+    const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+    const style = document.createElementNS('http://www.w3.org/2000/svg','style');
+    style.textContent = `
+      .veh{fill:#fff;stroke:#2b3b4f;stroke-width:1.3;}
+      .pallet-ns{fill:#f6b042;stroke:#fff;stroke-width:0.8;}
+      .pallet-eu{fill:#60a5fa;stroke:#fff;stroke-width:0.8;}
+      .gaylord{fill:#ffffff;stroke:#1f2937;stroke-width:0.9;}
+      .label{font-size:11px;fill:#0b1826;}
+      .meta{font-size:11px;fill:#2b3b4f;}
+      .cell-index{font-size:10px;fill:#fff;}
+    `;
+    defs.appendChild(style);
+    svg.appendChild(defs);
 
-    const grid = computeGrid(v.L,v.W, pal.w, pal.h);
-    const vehicleArea = (v.L * v.W);
-    const palCount = grid.n;
-    const palAreaTotal = +(palCount * pal.area).toFixed(3);
-    const percent = +((palAreaTotal / vehicleArea) * 100).toFixed(1);
-    const metaDiv = card.querySelector(`#${metaId}`);
-    if(lang==='cn'){
-      metaDiv.innerHTML = `<div>托盘类型：<strong>${palletName} ${pal.w}×${pal.h} m</strong></div>
-                           <div>理论可放（单层格子最大）：<strong>${palCount}</strong> 个</div>
-                           <div>托盘总占地：<strong>${palAreaTotal} m²</strong>（车厢地面 ${vehicleArea} m²， 占比 ${percent}%）</div>
-                           <div style="margin-top:6px;font-size:12px;color:#555">（说明：取两种单方向摆放的较大值；图示为直列格子摆放）</div>`;
-    } else {
-      metaDiv.innerHTML = `<div>Pallet type: <strong>${palletName} ${pal.w}×${pal.h} m</strong></div>
-                           <div>Theoretical max (single-layer grid): <strong>${palCount}</strong> pcs</div>
-                           <div>Total pallet area: <strong>${palAreaTotal} m²</strong> (vehicle floor ${vehicleArea} m², share ${percent}%)</div>
-                           <div style="margin-top:6px;font-size:12px;color:#555">(Note: takes larger of two orientations; diagram shows grid layout)</div>`;
+    // drawing group with margin
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    const marginX = 60, marginY = 40;
+    g.setAttribute('transform', `translate(${marginX},${marginY})`);
+    svg.appendChild(g);
+
+    // vehicle rect
+    const vehRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    vehRect.setAttribute('class','veh');
+    vehRect.setAttribute('x',0);
+    vehRect.setAttribute('y',0);
+    vehRect.setAttribute('width', v.L * scale);
+    vehRect.setAttribute('height', v.W * scale);
+    vehRect.setAttribute('rx',6);
+    vehRect.setAttribute('ry',6);
+    g.appendChild(vehRect);
+
+    // dims
+    const xDim = document.createElementNS('http://www.w3.org/2000/svg','text');
+    xDim.setAttribute('class','meta');
+    xDim.setAttribute('x',(v.L*scale)/2);
+    xDim.setAttribute('y', v.W*scale + 22);
+    xDim.setAttribute('text-anchor','middle');
+    xDim.textContent = `${v.L} m`;
+    g.appendChild(xDim);
+    const yGroup = document.createElementNS('http://www.w3.org/2000/svg','g');
+    yGroup.setAttribute('transform', `translate(-20,${(v.W*scale)/2}) rotate(-90)`);
+    const yDim = document.createElementNS('http://www.w3.org/2000/svg','text');
+    yDim.setAttribute('class','meta');
+    yDim.setAttribute('x',0); yDim.setAttribute('y',0);
+    yDim.setAttribute('text-anchor','middle');
+    yDim.textContent = `${v.W} m`;
+    yGroup.appendChild(yDim);
+    g.appendChild(yGroup);
+
+    // compute grid
+    const grid = computeGrid(v.L, v.W, pal.w, pal.h);
+    const cols = grid.cols, rows = grid.rows;
+    const cellW = grid.cellW, cellH = grid.cellH;
+
+    // draw pallets and gaylords
+    let palletIndex = 0;
+    const palClass = (activePallet==='eu') ? 'pallet-eu' : 'pallet-ns';
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const x = c * cellW * scale;
+        const y = r * cellH * scale;
+        // pallet rect
+        const pr = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        pr.setAttribute('class', palClass);
+        pr.setAttribute('x', x);
+        pr.setAttribute('y', y);
+        pr.setAttribute('width', cellW * scale);
+        pr.setAttribute('height', cellH * scale);
+        pr.setAttribute('rx',4);
+        pr.setAttribute('ry',4);
+        g.appendChild(pr);
+
+        // pallet index label
+        palletIndex++;
+        const idxText = document.createElementNS('http://www.w3.org/2000/svg','text');
+        idxText.setAttribute('class','cell-index');
+        idxText.setAttribute('x', x + 6);
+        idxText.setAttribute('y', y + 12);
+        idxText.textContent = `#${palletIndex}`;
+        g.appendChild(idxText);
+
+        // compute gaylord dx/dy (m)
+        let dx_m = 0, dy_m = 0;
+        if(globalDx !== null && globalDx !== undefined) {
+          dx_m = globalDx;
+          dy_m = globalDy || 0;
+        } else {
+          // 居中逻辑：按照 cell 长宽与 gaylord 大小居中
+          dx_m = (cellW - gaylord.w) / 2;
+          dy_m = (cellH - gaylord.h) / 2;
+        }
+        // convert to px
+        const dx_px = dx_m * scale;
+        const dy_px = dy_m * scale;
+
+        // draw gaylord rect inside pallet
+        const gr = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        gr.setAttribute('class','gaylord');
+        gr.setAttribute('x', x + dx_px);
+        gr.setAttribute('y', y + dy_px);
+        gr.setAttribute('width', gaylord.w * scale);
+        gr.setAttribute('height', gaylord.h * scale);
+        gr.setAttribute('rx',3);
+        gr.setAttribute('ry',3);
+        g.appendChild(gr);
+
+        // small label on gaylord with index
+        const gLabel = document.createElementNS('http://www.w3.org/2000/svg','text');
+        gLabel.setAttribute('class','label');
+        gLabel.setAttribute('x', x + dx_px + 6);
+        gLabel.setAttribute('y', y + dy_px + 14);
+        gLabel.textContent = `${palletIndex}`;
+        g.appendChild(gLabel);
+
+      }
     }
-  });
 
-  // footer bilingual summary
-  let footHtml = '';
-  if(lang==='cn'){
-    footHtml = `<strong>简洁汇总（单层、格子摆放，最大值）</strong>
-    <ul>
-      <li>Van (4.5×1.85 m)：欧洲托盘 6 个（占地 5.76 m² / 69.2%），非标准托盘 4 个（占地 4.80 m² / 57.7%）</li>
-      <li>Truck (6.5×2.48 m)：欧洲托盘 16 个（占地 15.36 m² / 95.2%），非标准托盘 12 个（占地 14.40 m² / 89.3%）</li>
-      <li>SOLO (7.2×2.48 m)：欧洲托盘 18 个（占地 17.28 m² / 96.8%），非标准托盘 14 个（占地 16.80 m² / 94.1%）</li>
-      <li>Standard Trailer (13.6×2.48 m)：欧洲托盘 34 个（占地 32.64 m² / 96.8%），非标准托盘 26 个（占地 31.20 m² / 92.5%）</li>
-    </ul>
-    <div style="margin-top:6px;color:#444;font-size:13px">说明：图为按格子整列摆放的理论示意（不考虑轮拱、门缝、绑固空间或留缝）。</div>`;
-  } else {
-    footHtml = `<strong>Brief summary (single-layer grid)</strong>
-    <ul>
-      <li>Van (4.5×1.85 m): EU pallets 6 pcs (5.76 m² / 69.2%), Non-standard 4 pcs (4.80 m² / 57.7%)</li>
-      <li>Truck (6.5×2.48 m): EU pallets 16 pcs (15.36 m² / 95.2%), Non-standard 12 pcs (14.40 m² / 89.3%)</li>
-      <li>SOLO (7.2×2.48 m): EU pallets 18 pcs (17.28 m² / 96.8%), Non-standard 14 pcs (16.80 m² / 94.1%)</li>
-      <li>Standard Trailer (13.6×2.48 m): EU pallets 34 pcs (32.64 m² / 96.8%), Non-standard 26 pcs (31.20 m² / 92.5%)</li>
-    </ul>
-    <div style="margin-top:6px;color:#444;font-size:13px">Note: diagrams are theoretical grid layouts (do not consider wheel arches, door gaps, lashing or clearance).</div>`;
-  }
-  footer.innerHTML = footHtml;
+    // overlay total
+    const totalText = document.createElementNS('http://www.w3.org/2000/svg','text');
+    totalText.setAttribute('class','label');
+    totalText.setAttribute('x', Math.min(v.L*scale - 6, 6));
+    totalText.setAttribute('y', Math.min(v.W*scale - 6, 14));
+    totalText.setAttribute('text-anchor','end');
+    totalText.textContent = `${grid.total} pcs`;
+    g.appendChild(totalText);
+
+    svg.appendChild(g);
+    card.appendChild(svg);
+
+    // meta block
+    const meta = document.createElement('div'); meta.className='meta';
+    const vehicleArea = (v.L * v.W).toFixed(3);
+    const palCount = grid.total;
+    const palAreaTotal = +(palCount * pal.area).toFixed(3);
+    const percent = +((palAreaTotal / (v.L * v.W)) * 100).toFixed(1);
+    if(lang==='cn'){
+      meta.innerHTML = `<div>托盘类型：<strong>${(activePallet==='eu'?pallets.eu.nameCN:pallets.ns.nameCN)} ${pal.w}×${pal.h} m</strong></div>
+                        <div>理论可放（单层格子最大）：<strong>${palCount}</strong> 个</div>
+                        <div>托盘总占地：<strong>${palAreaTotal} m²</strong>（车厢地面 ${vehicleArea} m²， 占比 ${percent}%）</div>
+                        <div class="small-muted">Gaylord（箱体）尺寸：${gaylord.w}×${gaylord.h} m，高 ${gaylord.height} m。当前偏移 dx=${(globalDx===null?((cellW - gaylord.w)/2).toFixed(3):globalDx.toFixed(3))} m, dy=${(globalDy===null?((cellH - gaylord.h)/2).toFixed(3):globalDy.toFixed(3))} m。</div>`;
+    } else {
+      meta.innerHTML = `<div>Pallet type: <strong>${(activePallet==='eu'?pallets.eu.nameEN:pallets.ns.nameEN)} ${pal.w}×${pal.h} m</strong></div>
+                        <div>Theoretical max (single-layer grid): <strong>${palCount}</strong> pcs</div>
+                        <div>Total pallet area: <strong>${palAreaTotal} m²</strong> (vehicle floor ${vehicleArea} m², share ${percent}%)</div>
+                        <div class="small-muted">Gaylord size: ${gaylord.w}×${gaylord.h} m, height ${gaylord.height} m. Current offset dx=${(globalDx===null?((cellW - gaylord.w)/2).toFixed(3):globalDx.toFixed(3))} m, dy=${(globalDy===null?((cellH - gaylord.h)/2).toFixed(3):globalDy.toFixed(3))} m.</div>`;
+    }
+    card.appendChild(meta);
+
+    canvas.appendChild(card);
+  });
 }
 
-/* UI handlers */
-btnEU.addEventListener('click', ()=>{
-  active = 'eu';
-  btnEU.classList.add('active'); btnNS.classList.remove('active');
-  render();
-});
-btnNS.addEventListener('click', ()=>{
-  active = 'ns';
-  btnNS.classList.add('active'); btnEU.classList.remove('active');
-  render();
-});
-scaleInput.addEventListener('change', ()=> render());
+/* 生成 CSV 内容 */
+function buildCsv(){
+  const pal = (activePallet === 'eu') ? pallets.eu : pallets.ns;
+  const rows = [];
+  // header
+  rows.push(['Vehicle','PalletIndex','CellX_m','CellY_m','PalletW_m','PalletH_m','Orientation','Gaylord_dx_m','Gaylord_dy_m','Gaylord_w_m','Gaylord_h_m','Height_m'].join(','));
+  vehicles.forEach(v=>{
+    const grid = computeGrid(v.L, v.W, pal.w, pal.h);
+    const cols = grid.cols, rowsCount = grid.rows;
+    const cellW = grid.cellW, cellH = grid.cellH;
+    let palletIndex = 0;
+    for(let r=0;r<rowsCount;r++){
+      for(let c=0;c<cols;c++){
+        palletIndex++;
+        const cellX_m = +(c * cellW).toFixed(3);
+        const cellY_m = +(r * cellH).toFixed(3);
+        let dx_m = 0, dy_m = 0;
+        if(globalDx !== null && globalDx !== undefined) {
+          dx_m = +(globalDx).toFixed(3);
+          dy_m = +(globalDy || 0).toFixed(3);
+        } else {
+          dx_m = +((cellW - gaylord.w)/2).toFixed(3);
+          dy_m = +((cellH - gaylord.h)/2).toFixed(3);
+        }
+        const orientation = (grid.orientation === 'A') ? `${cellW}x${cellH}` : `${cellW}x${cellH}`;
+        const line = [
+          v.key,
+          palletIndex,
+          cellX_m.toFixed(3),
+          cellY_m.toFixed(3),
+          cellW.toFixed(3),
+          cellH.toFixed(3),
+          orientation,
+          dx_m.toFixed(3),
+          dy_m.toFixed(3),
+          gaylord.w.toFixed(3),
+          gaylord.h.toFixed(3),
+          gaylord.height.toFixed(3)
+        ].join(',');
+        rows.push(line);
+      }
+    }
+  });
+  return rows.join('\n');
+}
 
-langBtnCN.addEventListener('click', ()=>{
-  lang = 'cn';
-  langBtnCN.classList.add('active'); langBtnEN.classList.remove('active');
-  render();
-});
-langBtnEN.addEventListener('click', ()=>{
-  lang = 'en';
-  langBtnEN.classList.add('active'); langBtnCN.classList.remove('active');
-  render();
-});
-
-/* initial render */
+/* 初始渲染 */
+updateLang();
 render();
+
 </script>
 </body>
 </html>
